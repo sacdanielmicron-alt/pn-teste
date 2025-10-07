@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Painel Micron — Supervisor</title>
+  <title>Painel Micron â€” Supervisor</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root{--bg:#121212;--panel:#1e1e1e;--muted:#2c2c2c;--text:#f5f5f5;--brand:#ff6600;--ok:#27ae60;--bad:#e74c3c;--pend:#f1c40f;--border:#333}
@@ -37,11 +37,10 @@
 
   <div id="loginCard" class="card">
     <div class="row">
-      <input id="username" placeholder="Usuário (ex: colaborador1)" />
-      <input id="password" type="password" placeholder="Senha" />
+      <input id="username" placeholder="Usuario (ex: colaborador1)" autocomplete="username" />
+      <input id="password" type="password" placeholder="Senha" autocomplete="current-password" />
       <button id="btnLogin">Entrar</button>
-      <button id="btnSignup">Criar conta (colaborador)</button>
-      <span class="small note">Supervisor: usuário <b>supervisor</b> / senha <b>Micron@2025</b> (armazenada em base64 no arquivo).</span>
+      <span class="small note">Supervisor: usuario <b>supervisor</b></span>
     </div>
   </div>
 
@@ -83,25 +82,34 @@
       <h2>Painel Supervisor</h2>
       <div class="row">
         <select id="filterUser"><option value="all">Todos os colaboradores</option></select>
-        <select id="filterSituacao"><option value="all">Todas as situações</option><option value="Instalado">Instalado</option><option value="Pendente">Pendente</option><option value="Cancelado">Cancelado</option></select>
+        <select id="filterSituacao"><option value="all">Todas as situacoes</option><option value="Instalado">Instalado</option><option value="Pendente">Pendente</option><option value="Cancelado">Cancelado</option></select>
         <button id="btnExportAll">Exportar CSV (Todos)</button>
         <button id="btnExportByUser">Exportar CSV (Selecionado)</button>
       </div>
-      <div class="note">Supervisor vê todas as vendas, pode exportar e filtrar por colaborador.</div>
+      <div style="margin-top:10px" class="row">
+        <div style="min-width:260px">
+          <div class="small">Criar usuario (apenas supervisor)</div>
+          <input id="newUser" placeholder="novo usuario" />
+          <input id="newPass" placeholder="nova senha" />
+          <select id="newRole"><option value="colaborador">colaborador</option><option value="supervisor">supervisor</option></select>
+          <button id="btnCreateUser">Criar usuario</button>
+        </div>
+      </div>
+      <div class="note">Supervisor ve todas as vendas, pode exportar e criar usuarios.</div>
     </div>
 
     <!-- tabela de vendas -->
     <div class="card">
       <h2>Vendas</h2>
       <div class="flex-between">
-        <div class="small">Registros armazenados localmente (localStorage). Supervisor vê tudo.</div>
+        <div class="small">Registros armazenados localmente (localStorage). Supervisor ve tudo.</div>
         <div class="small">Total: <span id="totalCount">0</span></div>
       </div>
       <table id="tableVendas"><thead><tr><th>Protocolo</th><th>Cliente</th><th>Plano</th><th>Localidade</th><th>Taxa</th><th>Dias</th><th>Situacao</th><th>Usuario</th><th>Acoes</th></tr></thead><tbody></tbody></table>
     </div>
 
     <div class="card">
-      <h2>Gráficos & Resumo</h2>
+      <h2>Graficos & Resumo</h2>
       <div class="charts">
         <canvas id="chartVendas"></canvas>
         <canvas id="chartTaxa"></canvas>
@@ -120,210 +128,12 @@ const SUPERVISOR_USER = 'supervisor';
 const SUPERVISOR_PASS_B64 = 'TWljcm9uQDIwMjU='; // base64 da senha: Micron@2025
 
 // -----------------------------
-// Utilitários
+// Utilitarios
 // -----------------------------
 const $ = s => document.querySelector(s);
 const ls = window.localStorage;
-
 function encodeBase64(str){ try{return btoa(str);}catch(e){return '';} }
 function decodeBase64(b64){ try{return atob(b64);}catch(e){return '';} }
 
-// -----------------------------
-// Gerenciamento de usuarios (localStorage)
-// Estrutura: users = [{username, password_b64, role}]
-// -----------------------------
-function getUsers(){ return JSON.parse(ls.getItem('micron_users')||'[]'); }
-function saveUsers(arr){ ls.setItem('micron_users', JSON.stringify(arr)); }
-
-function createUser(username, password, role='colaborador'){
-  const users = getUsers();
-  if(users.find(u=>u.username===username)) return {success:false, message:'Usuário já existe'};
-  users.push({username, password_b64: encodeBase64(password), role});
-  saveUsers(users);
-  return {success:true};
-}
-
-function findUser(username, password){
-  if(username===SUPERVISOR_USER){ // checagem do supervisor diretamente
-    if(encodeBase64(password)===SUPERVISOR_PASS_B64) return {username:SUPERVISOR_USER, role:'supervisor', isSupervisor:true};
-    return null;
-  }
-  const users = getUsers();
-  const u = users.find(x=>x.username===username && x.password_b64===encodeBase64(password));
-  return u?{username:u.username, role:u.role}:null;
-}
-
-// -----------------------------
-// Vendas (localStorage)
-// estrutura: vendas = [{id, protocolo, cliente, plano, localidade, taxa, dias, situacao, user}]
-// -----------------------------
-function getVendas(){ return JSON.parse(ls.getItem('micron_vendas')||'[]'); }
-function saveVendas(arr){ ls.setItem('micron_vendas', JSON.stringify(arr)); }
-function nextId(){ const vendas=getVendas(); return vendas.length? Math.max(...vendas.map(v=>v.id))+1 : 1; }
-
-// -----------------------------
-// Interacao DOM / Login
-// -----------------------------
-let CURRENT_USER = null;
-
-$('#btnSignup').addEventListener('click', ()=>{
-  const u = $('#username').value.trim(); const p = $('#password').value;
-  if(!u||!p){ alert('Preencha usuário e senha para criar conta'); return; }
-  const res = createUser(u,p,'colaborador');
-  if(res.success) alert('Conta criada! Faça login.'); else alert(res.message);
-});
-
-$('#btnLogin').addEventListener('click', ()=>{
-  const u = $('#username').value.trim(); const p = $('#password').value;
-  if(!u||!p){ alert('Preencha usuário e senha'); return; }
-  const found = findUser(u,p);
-  if(!found){ alert('Usuário ou senha inválidos'); return; }
-  CURRENT_USER = found;
-  $('#loginCard').classList.add('hidden');
-  $('#app').classList.remove('hidden');
-  $('#welcome').textContent = 'Olá, ' + CURRENT_USER.username;
-  $('#roleLabel').textContent = CURRENT_USER.role === 'supervisor' ? 'Supervisor (acesso total)' : 'Colaborador';
-  if(CURRENT_USER.role === 'supervisor') $('#supervisorPanel').classList.remove('hidden'); else $('#supervisorPanel').classList.add('hidden');
-  refreshUsersSelect(); renderAll();
-});
-
-$('#btnLogout').addEventListener('click', ()=>{ CURRENT_USER=null; $('#app').classList.add('hidden'); $('#loginCard').classList.remove('hidden'); $('#username').value=''; $('#password').value=''; });
-
-// -----------------------------
-// Planos e UI dinamica
-// -----------------------------
-const PLANOS_URBANOS = ["COMBO 400 MEGA","COMBO 500 MEGA","COMBO 600 MEGA","COMBO 700 MEGA","COMBO 800 MEGA"];
-const PLANOS_RURAIS = ["COMBO 100 LEVE 600 MEGA - RURAL +"];
-
-function popularPlanos(loc){ const sel = $('#plano'); sel.innerHTML='<option value="">Selecione o plano</option>'; const lista = loc==='Rural'?PLANOS_RURAIS:PLANOS_URBANOS; lista.forEach(p=>{ const o = document.createElement('option'); o.value=p; o.textContent=p; sel.appendChild(o); }); }
-
-$('#localidade').addEventListener('change', ()=>{
-  const loc = $('#localidade').value;
-  $('#planoWrap').classList.toggle('hidden', !loc);
-  $('#diasWrap').classList.toggle('hidden', !loc);
-  if(loc) popularPlanos(loc);
-  if(loc==='Rural') $('#taxaWrap').classList.remove('hidden'); else { $('#taxaWrap').classList.add('hidden'); $('#taxa').value=''; }
-});
-
-// -----------------------------
-// CRUD Vendas
-// -----------------------------
-$('#btnAdd').addEventListener('click', ()=>{
-  if(!CURRENT_USER){ alert('Faça login'); return; }
-  const protocolo = $('#protocolo').value.trim(); const cliente = $('#cliente').value.trim(); const localidade = $('#localidade').value; const plano = $('#plano').value; const taxa = localidade==='Rural'? parseFloat($('#taxa').value||0):0; const diasTxt = $('#dias').value.trim(); const dias = parseFloat(diasTxt.replace('R$','').replace(',','.'))||0; if(!protocolo||!cliente||!localidade||!plano){ alert('Preencha todos os campos'); return; }
-  const v = { id: nextId(), protocolo, cliente, plano, localidade, taxa, dias, situacao:'Pendente', user: CURRENT_USER.username };
-  const arr = getVendas(); arr.push(v); saveVendas(arr); clearForm(); renderAll();
-});
-
-function clearForm(){ $('#protocolo').value=''; $('#cliente').value=''; $('#localidade').value=''; $('#plano').value=''; $('#taxa').value=''; $('#dias').value=''; $('#planoWrap').classList.add('hidden'); $('#taxaWrap').classList.add('hidden'); $('#diasWrap').classList.add('hidden'); }
-
-function renderAll(){ renderTable(); renderCharts(); }
-
-function renderTable(){
-  const tbody = document.querySelector('#tableVendas tbody'); tbody.innerHTML='';
-  const vendas = getVendas();
-  const filterUser = $('#filterUser') ? $('#filterUser').value : 'all';
-  const filterSit = $('#filterSituacao') ? $('#filterSituacao').value : 'all';
-  const visible = vendas.filter(v=>{
-    if(CURRENT_USER.role!=='supervisor' && v.user !== CURRENT_USER.username) return false;
-    if(filterUser && filterUser!=='all' && v.user !== filterUser) return false;
-    if(filterSit && filterSit!=='all' && v.situacao !== filterSit) return false;
-    return true;
-  });
-  visible.forEach(v=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><a class="link" href="http://integra.micron.com.br/principal/index.php?protocolo=${encodeURIComponent(v.protocolo)}" target="_blank">${v.protocolo}</a></td>
-      <td>${v.cliente}</td>
-      <td>${v.plano}</td>
-      <td>${v.localidade}</td>
-      <td>R$ ${v.taxa.toFixed(2)}</td>
-      <td>R$ ${v.dias.toFixed(2)}</td>
-      <td><span class="badge ${v.situacao==='Pendente'?'pendente':v.situacao==='Instalado'?'instalado':'cancelado'}">${v.situacao}</span></td>
-      <td>${v.user}</td>
-      <td class="actions">
-        <button onclick="setSituacao(${v.id},'Instalado')">Instalar</button>
-        <button onclick="setSituacao(${v.id},'Cancelado')">Cancelar</button>
-        <button onclick="setSituacao(${v.id},'Pendente')">Pendente</button>
-        ${CURRENT_USER.role==='supervisor' || v.user===CURRENT_USER.username ? `<button onclick="editVenda(${v.id})">Editar</button><button onclick="removeVenda(${v.id})">Remover</button>` : ''}
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-  $('#totalCount').textContent = visible.length;
-}
-
-window.setSituacao = function(id, nova){ const arr = getVendas(); const idx = arr.findIndex(x=>x.id===id); if(idx===-1) return; arr[idx].situacao = nova; saveVendas(arr); renderAll(); }
-window.removeVenda = function(id){ if(!confirm('Confirma remoção?')) return; const arr = getVendas(); const n = arr.filter(x=>x.id!==id); saveVendas(n); renderAll(); }
-window.editVenda = function(id){ const arr = getVendas(); const v = arr.find(x=>x.id===id); if(!v) return; if(CURRENT_USER.role!=='supervisor' && v.user!==CURRENT_USER.username){ alert('Sem permissão'); return; } $('#protocolo').value=v.protocolo; $('#cliente').value=v.cliente; $('#localidade').value=v.localidade; $('#planoWrap').classList.remove('hidden'); popularPlanos(v.localidade); $('#plano').value=v.plano; $('#dias').value=v.dias; if(v.localidade==='Rural') $('#taxa').value=v.taxa; // remove old e deixamos novo cadastro
-  const n = arr.filter(x=>x.id!==id); saveVendas(n); renderAll(); }
-
-// -----------------------------
-// Charts
-// -----------------------------
-let chartV, chartT, chartD, chartR;
-function renderCharts(){
-  const vendas = getVendas().filter(v=> CURRENT_USER.role==='supervisor' ? true : v.user===CURRENT_USER.username );
-  const totalU = vendas.filter(v=>v.localidade==='Urbana').length;
-  const totalR = vendas.filter(v=>v.localidade==='Rural').length;
-  const somaTaxaR = vendas.filter(v=>v.localidade==='Rural').reduce((s,v)=>s+v.taxa,0);
-  const somaDiasU = vendas.filter(v=>v.localidade==='Urbana').reduce((s,v)=>s+v.dias,0);
-  const somaDiasR = vendas.filter(v=>v.localidade==='Rural').reduce((s,v)=>s+v.dias,0);
-  const resumoG = somaTaxaR + somaDiasU + somaDiasR;
-
-  // destruir se existir
-  if(chartV) chartV.destroy(); if(chartT) chartT.destroy(); if(chartD) chartD.destroy(); if(chartR) chartR.destroy();
-
-  const ctxV = document.getElementById('chartVendas').getContext('2d');
-  chartV = new Chart(ctxV,{type:'pie', data:{labels:['Urbana','Rural'], datasets:[{data:[totalU,totalR]}]}});
-  const ctxT = document.getElementById('chartTaxa').getContext('2d');
-  chartT = new Chart(ctxT,{type:'pie', data:{labels:['Taxas Rurais'], datasets:[{data:[somaTaxaR]}]}});
-  const ctxD = document.getElementById('chartDias').getContext('2d');
-  chartD = new Chart(ctxD,{type:'pie', data:{labels:['Urbana','Rural'], datasets:[{data:[somaDiasU,somaDiasR]}]}});
-  const ctxR = document.getElementById('chartResumo').getContext('2d');
-  chartR = new Chart(ctxR,{type:'pie', data:{labels:['Total Geral'], datasets:[{data:[resumoG]}]}});
-
-  // resumo boxes
-  const container = $('#resumoBoxes'); container.innerHTML='';
-  ['Instalado','Cancelado','Pendente'].forEach(s=>{ ['Urbana','Rural'].forEach(loc=>{ const total = vendas.filter(v=>v.situacao===s && v.localidade===loc).length; const box = document.createElement('div'); box.className='card'; box.style.minWidth='140px'; box.innerHTML=`<strong>${s} ${loc}</strong><div style="font-size:18px;margin-top:6px">${total}</div>`; container.appendChild(box); }); });
-}
-
-// -----------------------------
-// Supervisor utilities: export CSV, users list
-// -----------------------------
-function refreshUsersSelect(){ const sel = $('#filterUser'); if(!sel) return; sel.innerHTML = '<option value="all">Todos</option>'; const users = getUsers().map(u=>u.username); // also ensure vendas users
-  const vendas = getVendas(); vendas.forEach(v=>{ if(!users.includes(v.user)) users.push(v.user); });
-  users.forEach(u=> sel.appendChild(new Option(u,u)));
-}
-
-function toCSV(rows){ if(!rows.length) return '';
-  const keys = Object.keys(rows[0]);
-  const lines = [keys.join(',')];
-  rows.forEach(r=>{ const line = keys.map(k=> '"'+String(r[k]).replace(/"/g,'""')+'"').join(','); lines.push(line); });
-  return lines.join('\n');
-}
-
-$('#btnExportAll').addEventListener('click', ()=>{
-  const rows = getVendas(); if(!rows.length){ alert('Sem dados'); return; }
-  const csv = toCSV(rows);
-  downloadText(csv, 'micron_vendas_all.csv');
-});
-
-$('#btnExportByUser').addEventListener('click', ()=>{
-  const user = $('#filterUser').value; const rows = getVendas().filter(r=> user==='all' ? true : r.user===user ); if(!rows.length){ alert('Sem dados para o filtro'); return; } const csv = toCSV(rows); downloadText(csv, `micron_vendas_${user}.csv`);
-});
-
-function downloadText(text, filename){ const blob = new Blob([text],{type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); }
-
-// quando filtros mudam
-if($('#filterSituacao')) $('#filterSituacao').addEventListener('change', renderAll);
-if($('#filterUser')) $('#filterUser').addEventListener('change', renderAll);
-
-// Inicializacao rapida: criar usuario exemplo se nao existir
-(function initDemo(){ const users = getUsers(); if(!users.length){ createUser('daniel','senha123','colaborador'); createUser('maria','maria123','colaborador'); }
-  // se quiser, você pode remover a demo
-})();
-
-</script>
-</body>
-</html>
+// normalizar texto: remover acentos e caracteres estranhos
+function normalizeText(str){ if(!str) return ''; return str.normalize('NFD').replace(/[Ì€-Í¯]/g, '').replace(/[^
